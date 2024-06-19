@@ -1,10 +1,8 @@
-# Tree_species_deep_learning
-
-## Hybrid InceptionTime (in Pytorch)
+# Hybrid InceptionTime (in Pytorch)
 
 Unofficial Pytorch implementation of Hybrid Inception layer for time series classification.
 
-* Unofficial InceptionTime Pytorch implementation: https://github.com/TheMrGhostman/InceptionTime-Pytorch/blob/master/inception.py.
+* Unofficial InceptionTime Pytorch implementation: https://github.com/TheMrGhostman/InceptionTime-Pytorch/tree/master.
 
 * Fawaz, H. I., Lucas, B., Forestier, G., Pelletier, C., Schmidt, D. F., Weber, J., ... & Petitjean, F. (2019). InceptionTime: Finding AlexNet for Time Series Classification. [arXiv preprint arXiv:1909.04939.](https://arxiv.org/abs/1909.04939)
 

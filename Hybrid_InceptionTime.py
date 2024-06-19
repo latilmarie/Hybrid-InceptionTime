@@ -3,11 +3,8 @@ import torch.nn as nn
 import numpy as np
 
 """
-The main core of the InceptionTime architecture is coming from another GitHub: https://github.com/TheMrGhostman/InceptionTime-Pytorch/blob/master/inception.py
-It includes the InceptionTime architecture rewritten in Pytorch instead of Keras.
+Unofficial InceptionTime Pytorch implementation: https://github.com/TheMrGhostman/InceptionTime-Pytorch/tree/master.
 A parameter for the hybrid case is added to the architecture.
-
-The end of the code is the new part including the hybrid architecture in Pytorch instead of Kears.
 """
 
 def correct_sizes(sizes):
@@ -308,8 +305,8 @@ class InceptionTransposeBlock(nn.Module):
 
 
 """
-This is the beginning of the new part to include the hybrid architecture.
-According to this paper: https://doi.org/10.1109/BigData55660.2022.10020496 and the associated GitHub that defines the hybrid layer in Keras.
+New part: unofficial Hybrid InceptionTime Pytorch implementation.
+Official Hybrid InceptionTime tensorflow implementation: https://github.com/MSD-IRIMAS/CF-4-TSC/tree/main
 """
 
 class HybridLayer(nn.Module):
