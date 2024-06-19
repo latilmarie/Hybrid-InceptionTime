@@ -3,14 +3,16 @@ import torch.nn as nn
 import numpy as np
 
 """
-The beginning of the code is coming from another GitHub: https://github.com/TheMrGhostman/InceptionTime-Pytorch/blob/master/inception.py
-It includes the InceptionTime architecture rewritten in Pytorch.
+The main core of the InceptionTime architecture is coming from another GitHub: https://github.com/TheMrGhostman/InceptionTime-Pytorch/blob/master/inception.py
+It includes the InceptionTime architecture rewritten in Pytorch instead of Keras.
+A parameter for the hybrid case is added to the architecture.
+
+The end of the code is the new part including the hybrid architecture in Pytorch instead of Kears.
 """
 
 def correct_sizes(sizes):
 	corrected_sizes = [s if s % 2 != 0 else s - 1 for s in sizes]
 	return corrected_sizes
-
 
 def pass_through(X):
 	return X
@@ -42,9 +44,7 @@ class Inception(nn.Module):
 		self.return_indices=return_indices
 		self.use_hybrid = use_hybrid
   
-		# bottleneck layer of bottleneck_channels=32 filters of size 1 (purple in architecture diagram)
 		if in_channels > 1:
-			# print(in_channels, bottleneck_channels)
 			self.bottleneck = nn.Conv1d(
 								in_channels=in_channels, 
 								out_channels=bottleneck_channels, 
@@ -56,7 +56,6 @@ class Inception(nn.Module):
 			self.bottleneck = pass_through
 			bottleneck_channels = 1
 
-		# the 3 convolutional layers with n_filters=32 of size kernel_sizes= 40, 20, 10 (orange in architecture diagram)
 		self.conv_from_bottleneck_1 = nn.Conv1d(
 										in_channels=bottleneck_channels, 
 										out_channels=n_filters, 
@@ -81,11 +80,7 @@ class Inception(nn.Module):
 										padding='same', 
 										bias=False
 										)
-  
-		# maxpooling layer with kernel size k=3 (fushia in architecture diagram)
 		self.max_pool = nn.MaxPool1d(kernel_size=3, stride=1, padding=1, return_indices=return_indices)
-		
-		# convolutional layer after maxpooling layer of size bottleneck_channels=32 and kernel_size=1
 		self.conv_from_maxpool = nn.Conv1d(
 									in_channels=in_channels, 
 									out_channels=n_filters, 
@@ -97,26 +92,17 @@ class Inception(nn.Module):
   
 		if use_hybrid:
 			self.hybrid = HybridLayer(input_channels=bottleneck_channels)
-      
-    
-		# batch normalization (green in architecture diagram)
+   
 		self.batch_norm = nn.BatchNorm1d(num_features=4*n_filters)
-  
-		# activation function (pink in architecture diagram)
 		self.activation = activation
 
 	def forward(self, X):
-		# we are inbetween the pink (activation) and purple (bottleneck) in architecture diagram  
-  		# step 1: bottleneck (purple) and maxpooling (fushia)
-		# bottleneck layer (purple 32 on the pink input)
 		Z_bottleneck = self.bottleneck(X)
-		# maxpooling layer (fushia 3 on the pink input)
 		if self.return_indices:
 			Z_maxpool, indices = self.max_pool(X)
 		else:
 			Z_maxpool = self.max_pool(X)
 		
-  		# step 2: 4 convolutional layers (orange) -> 3 after the bottleneck and 1 after the maxpooling
 		Z1 = self.conv_from_bottleneck_1(Z_bottleneck)
 		Z2 = self.conv_from_bottleneck_2(Z_bottleneck)
 		Z3 = self.conv_from_bottleneck_3(Z_bottleneck)
@@ -124,14 +110,12 @@ class Inception(nn.Module):
   
 		if self.use_hybrid:
 			Z5 = self.hybrid(Z_bottleneck)
-			Z = torch.cat([Z1, Z2, Z3, Z4, Z5], dim=1) # this creates the 5*n_filters as output
+			Z = torch.cat([Z1, Z2, Z3, Z4, Z5], dim=1)
 		else:
-			# step 3: concatenation (yellow), batch normalization (green) and activation (pink)
-			Z = torch.cat([Z1, Z2, Z3, Z4], dim=1) # this creates the 4*n_filters as output
+			Z = torch.cat([Z1, Z2, Z3, Z4], dim=1)
 			
 			Z = self.activation(self.batch_norm(Z))
   
-		# return indices if needed for decoder
 		if self.return_indices:
 			return Z, indices
 		else:
@@ -139,19 +123,12 @@ class Inception(nn.Module):
 
 
 class InceptionBlock(nn.Module):   
-	def __init__(self, in_channels, n_filters=32, kernel_sizes=[10,20,40], bottleneck_channels=32, use_residual=True, activation=nn.ReLU(), use_hybrid=False, return_indices=False):
-		"""
-		3 Inception modules (columnns) with 4 convolutional layers each (orange)
-		+ 1 residual convolution filter of n=128 filters of size k=1 (orange) and a normalization layer (green) (last line of the architecture)
-		It is creating 1 of the 2 blocks of the InceptionTime architecture
-		"""
-		
+	def __init__(self, in_channels, n_filters=32, kernel_sizes=[10,20,40], bottleneck_channels=32, use_residual=True, activation=nn.ReLU(), use_hybrid=False, return_indices=False):		
 		super(InceptionBlock, self).__init__()
 		self.use_residual = use_residual
 		self.return_indices = return_indices
 		self.activation = activation
   
-		# 3 columns of 4 convolutional layers (32,k)
 		self.inception_1 = Inception(
 							in_channels=in_channels,
 							n_filters=n_filters,
@@ -176,14 +153,11 @@ class InceptionBlock(nn.Module):
 							activation=activation,
 							return_indices=return_indices
 							)
-  
-		# 1 convolutional layer of n=128 filters of size k=1 
-  		# last line of the architecture diagram for each block: orange (convolution) and green (normalization)
 		if self.use_residual:
 			self.residual = nn.Sequential(
 								nn.Conv1d(
 									in_channels=in_channels, 
-									out_channels=4*n_filters, # 4*32=128
+									out_channels=4*n_filters,
 									kernel_size=1,
 									stride=1,
 									padding=0
@@ -211,8 +185,131 @@ class InceptionBlock(nn.Module):
 			return Z
 
 
+class InceptionTranspose(nn.Module):
+	def __init__(self, in_channels, out_channels, kernel_sizes=[9, 19, 39], bottleneck_channels=32, activation=nn.ReLU()):
+		"""
+		: param in_channels				Number of input channels (input features)
+		: param n_filters				Number of filters per convolution layer => out_channels = 4*n_filters
+		: param kernel_sizes			List of kernel sizes for each convolution.
+										Each kernel size must be odd number that meets -> "kernel_size % 2 !=0".
+										This is nessesery because of padding size.
+										For correction of kernel_sizes use function "correct_sizes". 
+		: param bottleneck_channels		Number of output channels in bottleneck. 
+										Bottleneck wont be used if nuber of in_channels is equal to 1.
+		: param activation				Activation function for output tensor (nn.ReLU()). 
+		"""
+		super(InceptionTranspose, self).__init__()
+		self.activation = activation
+		self.conv_to_bottleneck_1 = nn.ConvTranspose1d(
+										in_channels=in_channels, 
+										out_channels=bottleneck_channels, 
+										kernel_size=kernel_sizes[0], 
+										stride=1, 
+										padding=kernel_sizes[0]//2, 
+										bias=False
+										)
+		self.conv_to_bottleneck_2 = nn.ConvTranspose1d(
+										in_channels=in_channels, 
+										out_channels=bottleneck_channels, 
+										kernel_size=kernel_sizes[1], 
+										stride=1, 
+										padding=kernel_sizes[1]//2, 
+										bias=False
+										)
+		self.conv_to_bottleneck_3 = nn.ConvTranspose1d(
+										in_channels=in_channels, 
+										out_channels=bottleneck_channels, 
+										kernel_size=kernel_sizes[2], 
+										stride=1, 
+										padding=kernel_sizes[2]//2, 
+										bias=False
+										)
+		self.conv_to_maxpool = nn.Conv1d(
+									in_channels=in_channels, 
+									out_channels=out_channels, 
+									kernel_size=1, 
+									stride=1,
+									padding=0, 
+									bias=False
+									)
+		self.max_unpool = nn.MaxUnpool1d(kernel_size=3, stride=1, padding=1)
+		self.bottleneck = nn.Conv1d(
+								in_channels=3*bottleneck_channels, 
+								out_channels=out_channels, 
+								kernel_size=1, 
+								stride=1, 
+								bias=False
+								)
+		self.batch_norm = nn.BatchNorm1d(num_features=out_channels)
+
+	def forward(self, X, indices):
+		Z1 = self.conv_to_bottleneck_1(X)
+		Z2 = self.conv_to_bottleneck_2(X)
+		Z3 = self.conv_to_bottleneck_3(X)
+		Z4 = self.conv_to_maxpool(X)
+
+		Z = torch.cat([Z1, Z2, Z3], dim=1)
+		MUP = self.max_unpool(Z4, indices)
+		BN = self.bottleneck(Z)
+		# another possibility insted of sum BN and MUP is adding 2nd bottleneck transposed convolution
+		
+		return self.activation(self.batch_norm(BN + MUP))
+
+
+class InceptionTransposeBlock(nn.Module):
+	def __init__(self, in_channels, out_channels=32, kernel_sizes=[9,19,39], bottleneck_channels=32, use_residual=True, activation=nn.ReLU()):
+		super(InceptionTransposeBlock, self).__init__()
+		self.use_residual = use_residual
+		self.activation = activation
+		self.inception_1 = InceptionTranspose(
+							in_channels=in_channels,
+							out_channels=in_channels,
+							kernel_sizes=kernel_sizes,
+							bottleneck_channels=bottleneck_channels,
+							activation=activation
+							)
+		self.inception_2 = InceptionTranspose(
+							in_channels=in_channels,
+							out_channels=in_channels,
+							kernel_sizes=kernel_sizes,
+							bottleneck_channels=bottleneck_channels,
+							activation=activation
+							)
+		self.inception_3 = InceptionTranspose(
+							in_channels=in_channels,
+							out_channels=out_channels,
+							kernel_sizes=kernel_sizes,
+							bottleneck_channels=bottleneck_channels,
+							activation=activation
+							)	
+		if self.use_residual:
+			self.residual = nn.Sequential(
+								nn.ConvTranspose1d(
+									in_channels=in_channels, 
+									out_channels=out_channels, 
+									kernel_size=1,
+									stride=1,
+									padding=0
+									),
+								nn.BatchNorm1d(
+									num_features=out_channels
+									)
+								)
+
+	def forward(self, X, indices):
+		assert len(indices)==3
+		Z = self.inception_1(X, indices[2])
+		Z = self.inception_2(Z, indices[1])
+		Z = self.inception_3(Z, indices[0])
+		if self.use_residual:
+			Z = Z + self.residual(X)
+			Z = self.activation(Z)
+		return Z
+
+
 """
 This is the beginning of the new part to include the hybrid architecture.
+According to this paper: https://doi.org/10.1109/BigData55660.2022.10020496 and the associated GitHub that defines the hybrid layer in Keras.
 """
 
 class HybridLayer(nn.Module):
@@ -243,19 +340,18 @@ class HybridLayer(nn.Module):
             layers.append(conv_dec)
 
             # Peak detection filter, excluding the smallest kernel size for symmetry
-            if kernel_size > 2: # because only 5 peak filters
+            if kernel_size > 2:
                 filter_peak = self._create_filter(kernel_size, pattern='peak')
                 conv_peak = nn.Conv1d(in_channels=self.input_channels, out_channels=1, kernel_size=kernel_size + kernel_size // 2,
                                       padding='same', bias=False)
                 conv_peak.weight.data = filter_peak
                 conv_peak.weight.requires_grad = False                
                 layers.append(conv_peak)
-
         return nn.ModuleList(layers)
 
     def _create_filter(self, k, pattern):
         if pattern == 'increase':
-            filter_ = np.ones((1, self.input_channels, k)) # np.ones((row, column, depth)), each (row, column) has 'depth' values
+            filter_ = np.ones((1, self.input_channels, k))
             filter_[:, :, np.arange(k) % 2 == 0] = -1
         elif pattern == 'decrease':
             filter_ = np.ones((1, self.input_channels, k))
@@ -280,7 +376,6 @@ class HybridLayer(nn.Module):
         outputs = []
         for conv in self.conv_layers:
             outputs.append(conv(x))
-        # Concatenate along the feature dimension
         outputs = torch.cat(outputs, dim=1)
         return self.activation(outputs)
 
@@ -297,7 +392,6 @@ class HybridInceptionTime(nn.Module):
 			activation=nn.ReLU(),
 			use_hybrid=True
 		)
-        
         self.inception_block2 = InceptionBlock(
 			in_channels=n_filters*4,
 			n_filters=n_filters,
@@ -307,7 +401,6 @@ class HybridInceptionTime(nn.Module):
 			activation=nn.ReLU(),
    			use_hybrid=False
 		)
-        
         self.avg_pool = nn.AdaptiveAvgPool1d(output_size=1)
         self.flatten = Flatten(out_features=n_filters*4*1)
         self.fc = nn.Linear(in_features=n_filters*4*1, out_features=number_classes)
