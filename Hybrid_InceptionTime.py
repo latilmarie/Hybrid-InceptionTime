@@ -89,30 +89,31 @@ class Inception(nn.Module):
   
 		if use_hybrid:
 			self.hybrid = HybridLayer(input_channels=bottleneck_channels)
-   
-		self.batch_norm = nn.BatchNorm1d(num_features=4*n_filters)
+			self.batch_norm = nn.BatchNorm1d(num_features=4*n_filters+17)
+		else:
+			self.batch_norm = nn.BatchNorm1d(num_features=4*n_filters)
 		self.activation = activation
 
 	def forward(self, X):
+		# step 1
 		Z_bottleneck = self.bottleneck(X)
 		if self.return_indices:
 			Z_maxpool, indices = self.max_pool(X)
 		else:
 			Z_maxpool = self.max_pool(X)
-		
+		# step 2
 		Z1 = self.conv_from_bottleneck_1(Z_bottleneck)
 		Z2 = self.conv_from_bottleneck_2(Z_bottleneck)
 		Z3 = self.conv_from_bottleneck_3(Z_bottleneck)
 		Z4 = self.conv_from_maxpool(Z_maxpool)
-  
+		# step 3
 		if self.use_hybrid:
 			Z5 = self.hybrid(Z_bottleneck)
 			Z = torch.cat([Z1, Z2, Z3, Z4, Z5], dim=1)
 		else:
 			Z = torch.cat([Z1, Z2, Z3, Z4], dim=1)
-			
-			Z = self.activation(self.batch_norm(Z))
-  
+		
+		Z = self.activation(self.batch_norm(Z))
 		if self.return_indices:
 			return Z, indices
 		else:
