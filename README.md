@@ -1,6 +1,6 @@
 # Hybrid InceptionTime (in Pytorch)
 
-Unofficial Pytorch implementation of Hybrid Inception layer for time series classification.
+Unofficial Pytorch implementation of Hybrid Inception layer for time series classification.  
 It has been verified by Ali El Hadi Ismail-Fawaz.
 
 * Unofficial InceptionTime Pytorch implementation: https://github.com/TheMrGhostman/InceptionTime-Pytorch/tree/master.
